@@ -44,7 +44,7 @@ services:
     command: server
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik_default"
+      - "traefik.docker.network=ingress"
       - "traefik.http.services.authentik.loadbalancer.server.port=9000"
       - "traefik.http.middlewares.authentik-redirectscheme.redirectscheme.scheme=https"
       - "traefik.http.middlewares.authentik-redirectscheme.redirectscheme.permanent=true"
@@ -69,9 +69,6 @@ services:
       - /opt/authentik/custom-templates:/templates
     env_file:
       - .env
-    ports:
-      - "${COMPOSE_PORT_HTTP:-9000}:9000"
-      - "${COMPOSE_PORT_HTTPS:-9443}:9443"
     depends_on:
       postgresql:
         condition: service_healthy
