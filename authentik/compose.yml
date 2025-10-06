@@ -1,0 +1,119 @@
+version: "3.6"
+
+services:
+  postgresql:
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${PG_DB:-authentik}
+      POSTGRES_PASSWORD: ${PG_PASS:?database password required}
+      POSTGRES_USER: ${PG_USER:-authentik}
+    healthcheck:
+      interval: 30s
+      retries: 5
+      start_period: 20s
+      test:
+        - CMD-SHELL
+        - pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}
+      timeout: 5s
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - authentik
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+  redis:
+    image: docker.io/library/redis:alpine
+    command: --save 60 1 --loglevel warning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
+    networks:
+      - authentik
+    volumes:
+      - redis:/data
+
+  server:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.12.2}
+    restart: unless-stopped
+    command: server
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_default"
+      - "traefik.http.services.authentik.loadbalancer.server.port=9000"
+      - "traefik.http.middlewares.authentik-redirectscheme.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.authentik-redirectscheme.redirectscheme.permanent=true"
+      - "traefik.http.routers.authentik-insecure.rule=Host(`auth.clayman.pro`)"
+      - "traefik.http.routers.authentik-insecure.entrypoints=web"
+      - "traefik.http.routers.authentik-insecure.middlewares=authentik-redirectscheme@docker"
+      - "traefik.http.routers.authentik.rule=Host(`auth.clayman.pro`)"
+      - "traefik.http.routers.authentik.entrypoints=websecure"
+      - "traefik.http.routers.authentik.tls.certresolver=le"
+    environment:
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+    networks:
+      - authentik
+      - ingress
+    volumes:
+      - /opt/authentik/media:/media
+      - /opt/authentik/custom-templates:/templates
+    env_file:
+      - .env
+    ports:
+      - "${COMPOSE_PORT_HTTP:-9000}:9000"
+      - "${COMPOSE_PORT_HTTPS:-9443}:9443"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.12.2}
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+    networks:
+      - authentik
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/authentik/media:/media
+      - /opt/authentik/certs:/certs
+      - /opt/authentik/custom-templates:/templates
+    env_file:
+      - .env
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres:
+    driver: local
+  redis:
+    driver: local
+
+networks:
+  authentik:
+    name: authentik
+  ingress:
+    name: ingress
+    external: true
