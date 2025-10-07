@@ -27,8 +27,8 @@ services:
     healthcheck:
       retries: 5
     volumes:
-      - ./config.hcl:/vault/config.hcl
       - /opt/vault/data:/vault/data
+      - /opt/stacks/vault/config.hcl:/vault/config.hcl
 
 networks:
   ingress:
