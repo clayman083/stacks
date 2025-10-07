@@ -22,7 +22,6 @@ services:
       - "traefik.http.routers.vault.entrypoints=websecure"
       - "traefik.http.routers.vault.tls.certresolver=le"
     networks:
-      - monitoring
       - ingress
     restart: unless-stopped
     healthcheck:
