@@ -26,14 +26,9 @@ services:
     restart: unless-stopped
     healthcheck:
       retries: 5
-    user: "1001:1001"
     volumes:
       - /opt/vault/data:/vault/data
       - /opt/stacks/vault/config.hcl:/vault/config.hcl
-
-volumes:
-  vault_data:
-    driver: local
 
 networks:
   ingress:
