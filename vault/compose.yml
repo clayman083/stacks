@@ -1,0 +1,37 @@
+version: "3.6"
+
+services:
+  vault:
+    image: hashicorp/vault:1.18
+    command: server -config /vault/config.hcl
+    container_name: vault
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8201"
+    cap_add:
+      - IPC_LOCK
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=ingress"
+      - "traefik.http.services.vault.loadbalancer.server.port=8201"
+      - "traefik.http.middlewares.vault-redirectscheme.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.vault-redirectscheme.redirectscheme.permanent=true"
+      - "traefik.http.routers.vault-insecure.rule=Host(`vault.clayman.pro`)"
+      - "traefik.http.routers.vault-insecure.entrypoints=web"
+      - "traefik.http.routers.vault-insecure.middlewares=vault-redirectscheme@docker"
+      - "traefik.http.routers.vault.rule=Host(`vault.clayman.pro`)"
+      - "traefik.http.routers.vault.entrypoints=websecure"
+      - "traefik.http.routers.vault.tls.certresolver=le"
+    networks:
+      - monitoring
+      - ingress
+    restart: unless-stopped
+    healthcheck:
+      retries: 5
+    volumes:
+      - ./config.hcl:/vault/config.hcl
+      - /opt/vault/data:/vault/data
+
+networks:
+  ingress:
+    name: ingress
+    external: true
